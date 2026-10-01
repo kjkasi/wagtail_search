@@ -138,7 +138,18 @@ function setupPageSearch() {
 
     input.addEventListener("input", () => {
         window.clearTimeout(debounceTimer);
-        debounceTimer = window.setTimeout(runSearch, SEARCH_DEBOUNCE_MS);
+        requestSequence += 1;
+
+        if (controller) {
+            controller.abort();
+            controller = null;
+        }
+
+        container.replaceChildren();
+        closeResults();
+        if (input.value.trim()) {
+            debounceTimer = window.setTimeout(runSearch, SEARCH_DEBOUNCE_MS);
+        }
     });
 
     input.addEventListener("keydown", (event) => {
