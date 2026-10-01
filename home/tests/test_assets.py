@@ -15,3 +15,12 @@ class AssetBuildTests(SimpleTestCase):
         self.assertTrue(javascript.stat().st_size > 0)
         self.assertIn(".navbar", css.read_text(encoding="utf-8"))
         self.assertIn("collapse", javascript.read_text(encoding="utf-8"))
+
+    def test_frontend_search_code_is_present(self):
+        frontend = Path(__file__).resolve().parents[2] / "frontend" / "main.js"
+        source = frontend.read_text(encoding="utf-8")
+
+        self.assertIn("setupPageSearch", source)
+        self.assertIn("AbortController", source)
+        self.assertIn("pageSearchInput", source)
+        self.assertIn("pageSearchResults", source)
