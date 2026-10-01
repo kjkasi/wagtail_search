@@ -135,3 +135,16 @@ class PublicPageTests(TestCase):
         self.assertContains(response, 'data-bs-toggle="collapse"')
         self.assertContains(response, "/static/site/main.css")
         self.assertContains(response, "/static/site/main.js")
+
+    def test_base_template_contains_page_search_form_and_dropdown(self):
+        response = self.client.get("/")
+
+        self.assertContains(response, '<form id="pageSearchForm"')
+        self.assertContains(response, 'action="/search/"')
+        self.assertContains(response, 'role="search"')
+        self.assertContains(response, 'id="pageSearchInput"')
+        self.assertContains(response, 'name="q"')
+        self.assertContains(response, 'aria-controls="pageSearchResults"')
+        self.assertContains(response, 'aria-expanded="false"')
+        self.assertContains(response, 'id="pageSearchResults"')
+        self.assertContains(response, 'role="listbox"')

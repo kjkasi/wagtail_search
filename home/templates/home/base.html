@@ -16,6 +16,17 @@
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="mainNavbar">
+                <form id="pageSearchForm" class="d-flex align-items-center gap-2 position-relative me-lg-3"
+                      action="/search/" method="get" role="search">
+                    <label class="visually-hidden" for="pageSearchInput">Поиск по страницам</label>
+                    <div class="position-relative">
+                        <input id="pageSearchInput" class="form-control" type="search" name="q"
+                               autocomplete="off" aria-controls="pageSearchResults" aria-expanded="false">
+                        <div id="pageSearchResults" class="list-group position-absolute top-100 start-0 w-100 z-3"
+                             role="listbox" aria-live="polite" hidden></div>
+                    </div>
+                    <button class="btn btn-outline-primary" type="submit">Найти</button>
+                </form>
                 <ul class="navbar-nav ms-auto">
                     {% for item in navigation_items %}
                         <li class="nav-item">
