@@ -216,3 +216,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Wagtail local data and frontend build output
+static/site/main.css
+static/site/main.js
+staticfiles/
+media/
+.superpowers/
