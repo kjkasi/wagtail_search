@@ -30,7 +30,9 @@ class Command(BaseCommand):
         if root_page is None:
             raise RuntimeError("Wagtail root page does not exist")
 
-        home_page = HomePage.objects.filter(slug="demo-home").first()
+        home_page = (
+            HomePage.objects.child_of(root_page).filter(slug="demo-home").first()
+        )
         created_home = False
 
         if home_page is None:
@@ -48,10 +50,12 @@ class Command(BaseCommand):
 
         created_articles = 0
         for article_data in DEMO_ARTICLES:
-            article = ArticlePage.objects.filter(
-                slug=article_data["slug"],
-                path__startswith=home_page.path,
-            ).first()
+            article = (
+                home_page.get_children()
+                .type(ArticlePage)
+                .filter(slug=article_data["slug"])
+                .first()
+            )
             if article is None:
                 article = home_page.add_child(
                     instance=ArticlePage(

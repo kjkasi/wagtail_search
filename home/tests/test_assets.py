@@ -24,6 +24,7 @@ class AssetBuildTests(SimpleTestCase):
         self.assertIn("AbortController", source)
         self.assertIn("pageSearchInput", source)
         self.assertIn("pageSearchResults", source)
+        self.assertIn('result.type === "document"', source)
         self.assertIn(
             'input.addEventListener("input", () => {\n'
             '        window.clearTimeout(debounceTimer);\n'

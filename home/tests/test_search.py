@@ -1,11 +1,17 @@
+from django.core.files.base import ContentFile
 from django.core.management import call_command
-from django.test import TestCase
+from django.test import Client, TestCase
+from wagtail.documents import get_document_model
 from wagtail.models import Page, Site
 
 from home.models import ArticlePage, HomePage
 
+Document = get_document_model()
+
 
 class SearchViewTests(TestCase):
+    client: Client
+
     def setUp(self):
         root = Page.get_first_root_node()
         assert root is not None
@@ -30,6 +36,19 @@ class SearchViewTests(TestCase):
         self.visible = self._add_article(
             "Visible page", "visible", "<p>Visible text.</p>"
         )
+        self.attached_document = Document.objects.create(
+            title="Visible guide",
+            file=ContentFile(b"guide", name="visible-guide.pdf"),
+        )
+        self.unattached_document = Document.objects.create(
+            title="Orphan guide",
+            file=ContentFile(b"orphan", name="orphan-guide.pdf"),
+        )
+        self.visible.body = (
+            f'<p>Visible text.</p><p><a linktype="document" '
+            f'id="{self.attached_document.pk}">Visible guide</a></p>'
+        )
+        self.visible.save_revision().publish()
         self._add_article(
             "Hidden page",
             "hidden",
@@ -68,9 +87,36 @@ class SearchViewTests(TestCase):
         response = self.client.get("/search/?q=VISIBLE")
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(
+        self.assertIn(
+            {"type": "page", "title": "Visible page", "url": self.visible.url},
             response.json()["results"],
-            [{"title": "Visible page", "url": self.visible.url}],
+        )
+
+    def test_search_returns_attached_document_by_title(self):
+        results = self.client.get("/search/?q=GUIDE").json()["results"]
+
+        self.assertEqual(
+            results,
+            [
+                {
+                    "type": "document",
+                    "title": "Visible guide",
+                    "url": self.attached_document.url,
+                }
+            ],
+        )
+
+    def test_search_does_not_return_unattached_document(self):
+        results = self.client.get("/search/?q=Orphan").json()["results"]
+
+        self.assertEqual(results, [])
+
+    def test_search_includes_page_and_document_results(self):
+        results = self.client.get("/search/?q=Visible").json()["results"]
+
+        self.assertEqual(
+            {(item["type"], item["title"]) for item in results},
+            {("page", "Visible page"), ("document", "Visible guide")},
         )
 
     def test_search_includes_hidden_live_page_but_excludes_draft_and_root(self):
@@ -92,6 +138,44 @@ class SearchViewTests(TestCase):
         self.assertEqual(trimmed[0]["title"], "Visible page")
         self.assertEqual(self.client.get("/search/?q=%20%20").json(), {"results": []})
         self.assertEqual(self.client.get("/search/?q=unknown").json(), {"results": []})
+
+    def test_search_rejects_queries_longer_than_two_hundred_characters(self):
+        response = self.client.get("/search/", {"q": "x" * 201})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"error": "query_too_long", "results": []})
+
+    def test_search_limits_combined_page_and_document_results_to_ten(self):
+        for index in range(9):
+            self._add_article(
+                f"Result {index}",
+                f"result-{index}",
+                "<p>Result body.</p>",
+            )
+        for index in range(3):
+            document = Document.objects.create(
+                title=f"Result document {index}",
+                file=ContentFile(
+                    f"document-{index}".encode(), name=f"result-{index}.pdf"
+                ),
+            )
+            self._add_article(
+                f"Document page {index}",
+                f"document-page-{index}",
+                (
+                    f'<p><a linktype="document" id="{document.pk}">'
+                    f"{document.title}</a></p>"
+                ),
+            )
+        call_command("update_index", verbosity=0)
+
+        results = self.client.get("/search/?q=Result").json()["results"]
+
+        self.assertEqual(len(results), 10)
+        self.assertEqual(
+            sum(item["type"] == "document" for item in results),
+            1,
+        )
 
     def test_search_limits_results_to_ten(self):
         for index in range(12):

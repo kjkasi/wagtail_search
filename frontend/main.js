@@ -57,7 +57,11 @@ function renderSearchResults(container, results) {
         link.setAttribute("role", "option");
         link.id = `pageSearchResult-${index}`;
         link.href = String(result.url);
-        link.textContent = String(result.title ?? "");
+
+        const kind = document.createElement("span");
+        kind.className = "me-2 text-muted small";
+        kind.textContent = result.type === "document" ? "Документ" : "Страница";
+        link.append(kind, document.createTextNode(String(result.title ?? "")));
         container.append(link);
     });
 
