@@ -217,6 +217,9 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
+# Node dependencies
+node_modules/
+
 # Wagtail local data and frontend build output
 static/site/main.css
 static/site/main.js
