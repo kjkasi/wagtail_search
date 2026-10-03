@@ -27,7 +27,14 @@ class AssetBuildTests(SimpleTestCase):
         self.assertIn('result.type === "document"', source)
         self.assertIn(
             'input.addEventListener("input", () => {\n'
+            '        closeResults();\n'
+            '        container.replaceChildren();',
+            source,
+        )
+        self.assertIn(
+            'const closeResults = () => {\n'
             '        window.clearTimeout(debounceTimer);\n'
-            '        requestSequence += 1;',
+            '        requestSequence += 1;\n'
+            '        if (controller) {',
             source,
         )

@@ -84,6 +84,12 @@ function setupPageSearch() {
     let requestSequence = 0;
 
     const closeResults = () => {
+        window.clearTimeout(debounceTimer);
+        requestSequence += 1;
+        if (controller) {
+            controller.abort();
+            controller = null;
+        }
         setResultsVisibility(input, container, false);
     };
 
@@ -141,16 +147,8 @@ function setupPageSearch() {
     };
 
     input.addEventListener("input", () => {
-        window.clearTimeout(debounceTimer);
-        requestSequence += 1;
-
-        if (controller) {
-            controller.abort();
-            controller = null;
-        }
-
-        container.replaceChildren();
         closeResults();
+        container.replaceChildren();
         if (input.value.trim()) {
             debounceTimer = window.setTimeout(runSearch, SEARCH_DEBOUNCE_MS);
         }
