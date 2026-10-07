@@ -1,6 +1,8 @@
 from django.core.files.base import ContentFile
 from django.core.management import call_command
+from django.db import connection
 from django.test import Client, TestCase
+from django.test.utils import CaptureQueriesContext
 from wagtail.documents import get_document_model
 from wagtail.models import Page, Site
 
@@ -119,13 +121,96 @@ class SearchViewTests(TestCase):
             {("page", "Visible page"), ("document", "Visible guide")},
         )
 
-    def test_search_includes_hidden_live_page_but_excludes_draft_and_root(self):
+    def test_search_includes_hidden_live_page_but_excludes_draft(self):
         results = self.client.get("/search/?q=page").json()["results"]
         titles = [item["title"] for item in results]
 
         self.assertIn("Hidden page", titles)
         self.assertNotIn("Draft page", titles)
-        self.assertNotIn("Demo Home", titles)
+
+    def test_search_includes_current_site_root_page(self):
+        results = self.client.get("/search/?q=Demo%20Home").json()["results"]
+
+        self.assertIn(
+            {"type": "page", "title": "Demo Home", "url": self.home.url},
+            results,
+        )
+
+    def test_search_returns_document_by_rich_text_link_name(self):
+        document = Document.objects.create(
+            title="Internal manual",
+            file=ContentFile(b"manual", name="internal-manual.pdf"),
+        )
+        self.home.intro = (
+            f'<p><a linktype="document" id="{document.pk}">'
+            "Employee handbook"
+            "</a></p>"
+        )
+        self.home.save_revision().publish()
+
+        results = self.client.get("/search/?q=handbook").json()["results"]
+
+        self.assertEqual(
+            results,
+            [
+                {
+                    "type": "document",
+                    "title": "Internal manual",
+                    "url": document.url,
+                }
+            ],
+        )
+
+    def test_search_finds_attached_document_after_unattached_title_matches(self):
+        attached_document = Document.objects.create(
+            title="Needle",
+            file=ContentFile(b"attached", name="needle-attached.pdf"),
+        )
+        for index in range(2):
+            Document.objects.create(
+                title="Needle",
+                file=ContentFile(
+                    f"orphan-{index}".encode(), name=f"needle-orphan-{index}.pdf"
+                ),
+            )
+        self.visible.body = (
+            f'<p><a linktype="document" id="{attached_document.pk}">'
+            "Download manual"
+            "</a></p>"
+        )
+        self.visible.save_revision().publish()
+        for index in range(9):
+            self._add_article(
+                f"Needle page {index}",
+                f"needle-page-{index}",
+                "<p>Page.</p>",
+            )
+        call_command("update_index", verbosity=0)
+
+        results = self.client.get("/search/?q=Needle").json()["results"]
+
+        self.assertIn(
+            {
+                "type": "document",
+                "title": "Needle",
+                "url": attached_document.url,
+            },
+            results,
+        )
+
+    def test_search_batches_specific_page_loading(self):
+        for index in range(12):
+            self._add_article(
+                f"Extra page {index}",
+                f"extra-page-{index}",
+                f"<p>Extra page {index}.</p>",
+            )
+
+        with CaptureQueriesContext(connection) as queries:
+            response = self.client.get("/search/?q=unknown")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertLess(len(queries), 15)
 
     def test_search_does_not_match_body_only(self):
         results = self.client.get("/search/?q=body-only-term").json()["results"]
