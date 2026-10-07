@@ -1,10 +1,12 @@
+from unittest.mock import patch
+
 from django.core.files.base import ContentFile
 from django.core.management import call_command
 from django.db import connection
 from django.test import Client, TestCase
 from django.test.utils import CaptureQueriesContext
 from wagtail.documents import get_document_model
-from wagtail.models import Page, Site
+from wagtail.models import Page, PageViewRestriction, Site
 
 from home.models import ArticlePage, HomePage
 
@@ -128,6 +130,79 @@ class SearchViewTests(TestCase):
         self.assertIn("Hidden page", titles)
         self.assertNotIn("Draft page", titles)
 
+    def test_search_excludes_pages_under_view_restrictions(self):
+        restricted = self._add_article(
+            "Restricted page",
+            "restricted",
+            "<p>Restricted text.</p>",
+        )
+        PageViewRestriction.objects.create(
+            page=restricted,
+            restriction_type=PageViewRestriction.LOGIN,
+        )
+        call_command("update_index", verbosity=0)
+
+        results = self.client.get("/search/?q=Restricted").json()["results"]
+
+        self.assertNotIn(
+            {"type": "page", "title": "Restricted page", "url": restricted.url},
+            results,
+        )
+
+    def test_search_uses_document_titles_not_tags(self):
+        self.attached_document.tags.add("secret")
+        call_command("update_index", verbosity=0)
+
+        results = self.client.get("/search/?q=secret").json()["results"]
+
+        self.assertEqual(results, [])
+
+    def test_search_works_with_search_results_without_get_queryset(self):
+        with patch.object(
+            type(Document.objects.all()),
+            "search",
+            return_value=[self.attached_document],
+        ):
+            results = self.client.get("/search/?q=Visible").json()["results"]
+
+        self.assertIn(
+            {
+                "type": "document",
+                "title": "Visible guide",
+                "url": self.attached_document.url,
+            },
+            results,
+        )
+
+    def test_search_matches_outer_document_link_with_nested_anchor(self):
+        outer_document = Document.objects.create(
+            title="Outer file",
+            file=ContentFile(b"outer", name="outer.pdf"),
+        )
+        inner_document = Document.objects.create(
+            title="Inner file",
+            file=ContentFile(b"inner", name="inner.pdf"),
+        )
+        self.visible.body = (
+            f'<p><a linktype="document" id="{outer_document.pk}">Outer label '
+            f'<a linktype="document" id="{inner_document.pk}">Inner label</a>'
+            "</a></p>"
+        )
+        self.visible.save_revision().publish()
+
+        results = self.client.get("/search/?q=Outer%20label").json()["results"]
+
+        self.assertEqual(
+            results,
+            [
+                {
+                    "type": "document",
+                    "title": "Outer file",
+                    "url": outer_document.url,
+                }
+            ],
+        )
+
     def test_search_includes_current_site_root_page(self):
         results = self.client.get("/search/?q=Demo%20Home").json()["results"]
 
@@ -211,6 +286,44 @@ class SearchViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertLess(len(queries), 15)
+
+    def test_search_fetches_link_matches_in_batches(self):
+        links = []
+        for index in range(3):
+            document = Document.objects.create(
+                title=f"Batch document {index}",
+                file=ContentFile(
+                    f"batch-{index}".encode(), name=f"batch-{index}.pdf"
+                ),
+            )
+            links.append(
+                f'<a linktype="document" id="{document.pk}">Batch download</a>'
+            )
+        self.visible.body = "<p>" + " ".join(links) + "</p>"
+        self.visible.save_revision().publish()
+
+        with (
+            patch("home.views.DOCUMENT_BATCH_SIZE", 2),
+            patch.object(
+                Document.objects,
+                "filter",
+                wraps=Document.objects.filter,
+            ) as document_filter,
+        ):
+            results = self.client.get("/search/?q=Batch%20download").json()[
+                "results"
+            ]
+
+        filter_sizes = [
+            len(call.kwargs["pk__in"])
+            for call in document_filter.call_args_list
+            if "pk__in" in call.kwargs
+        ]
+        self.assertIn(2, filter_sizes)
+        self.assertEqual(
+            {item["title"] for item in results},
+            {"Batch document 0", "Batch document 1", "Batch document 2"},
+        )
 
     def test_search_does_not_match_body_only(self):
         results = self.client.get("/search/?q=body-only-term").json()["results"]
