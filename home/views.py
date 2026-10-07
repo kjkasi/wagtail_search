@@ -1,7 +1,6 @@
 from collections.abc import Iterable, Iterator
 from html.parser import HTMLParser
 from itertools import islice
-from typing import cast
 
 from django.http import HttpRequest, JsonResponse
 from django.views.decorators.http import require_GET
@@ -75,8 +74,8 @@ def _document_links_for_pages(
 
 def _documents_for_ids_in_order(
     document_ids: Iterable[str], limit: int,
-) -> list:
-    documents = []
+) -> list[Document]:
+    documents: list[Document] = []
     document_ids_iterator = iter(document_ids)
     while len(documents) < limit:
         batch_ids = list(islice(document_ids_iterator, DOCUMENT_BATCH_SIZE))
@@ -98,7 +97,7 @@ def _documents_for_ids_in_order(
 
 @require_GET
 def search(request: HttpRequest) -> JsonResponse:
-    query = cast(str, request.GET.get("q", "")).strip()
+    query = request.GET.get("q", "").strip()
     if not query:
         return JsonResponse({"results": []})
     if len(query) > MAX_SEARCH_QUERY_LENGTH:
@@ -119,7 +118,7 @@ def search(request: HttpRequest) -> JsonResponse:
     pages = list(site_pages.search(query)[:MAX_SEARCH_RESULTS])
     remaining_results = MAX_SEARCH_RESULTS - len(pages)
 
-    documents = []
+    documents: list[Document] = []
     if remaining_results:
         document_links_by_id: dict[str, list[str]] = {}
         for document_id, link_text in _document_links_for_pages(
@@ -128,12 +127,11 @@ def search(request: HttpRequest) -> JsonResponse:
             document_links_by_id.setdefault(document_id, []).append(link_text)
 
         linked_document_ids = set(document_links_by_id)
-        title_matching_documents = list(
+        documents = list(
             Document.objects.filter(pk__in=linked_document_ids).search(
                 query, fields=["title"]
             )[:remaining_results]
         )
-        documents = title_matching_documents
         seen_document_ids = {str(document.pk) for document in documents}
         link_matching_document_ids = (
             document_id

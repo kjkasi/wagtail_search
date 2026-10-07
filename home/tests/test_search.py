@@ -2,9 +2,7 @@ from unittest.mock import patch
 
 from django.core.files.base import ContentFile
 from django.core.management import call_command
-from django.db import connection
 from django.test import Client, TestCase
-from django.test.utils import CaptureQueriesContext
 from wagtail.documents import get_document_model
 from wagtail.models import Page, PageViewRestriction, Site
 
@@ -273,7 +271,7 @@ class SearchViewTests(TestCase):
             results,
         )
 
-    def test_search_batches_specific_page_loading(self):
+    def test_search_loads_specific_pages_in_configured_batches(self):
         for index in range(12):
             self._add_article(
                 f"Extra page {index}",
@@ -281,11 +279,25 @@ class SearchViewTests(TestCase):
                 f"<p>Extra page {index}.</p>",
             )
 
-        with CaptureQueriesContext(connection) as queries:
+        page_queryset_type = type(Page.objects.all())
+        with (
+            patch("home.views.DOCUMENT_BATCH_SIZE", 2),
+            patch.object(
+                page_queryset_type,
+                "iterator",
+                autospec=True,
+                wraps=page_queryset_type.iterator,
+            ) as page_iterator,
+        ):
             response = self.client.get("/search/?q=unknown")
 
         self.assertEqual(response.status_code, 200)
-        self.assertLess(len(queries), 15)
+        self.assertTrue(
+            any(
+                call.kwargs.get("chunk_size") == 2
+                for call in page_iterator.call_args_list
+            )
+        )
 
     def test_search_fetches_link_matches_in_batches(self):
         links = []
