@@ -26,6 +26,11 @@ class SectionPage(BasePage):
     parent_page_types = ["home.HomePage"]
     subpage_types = ["home.ArticlePage"]
 
+    def get_context(self, request, *args, **kwargs):
+        context = super().get_context(request, *args, **kwargs)
+        context["children"] = self.get_children().live().public()
+        return context
+
 
 class ArticlePage(BasePage):
     parent_page_types = ["home.SectionPage"]
