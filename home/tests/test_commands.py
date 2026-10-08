@@ -30,6 +30,16 @@ class SeedDemoCommandTests(TestCase):
         )
         self.assertEqual(Site.objects.get(is_default_site=True).root_page_id, home.id)
 
+    def test_seed_demo_preserves_edited_section_title(self):
+        self.run_seed()
+        section = SectionPage.objects.get(slug="foo")
+        section.title = "Reports"
+        section.save_revision().publish()
+
+        self.run_seed()
+
+        self.assertEqual(SectionPage.objects.get(slug="foo").title, "Reports")
+
     def test_seed_demo_is_idempotent_and_preserves_body(self):
         self.run_seed()
         home = HomePage.objects.get(slug="demo-home")

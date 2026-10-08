@@ -37,9 +37,6 @@ class Command(BaseCommand):
             else:
                 self.stdout.write(f"Reusing section: {slug}")
                 section_updates = []
-                if section.title != slug:
-                    section.title = slug
-                    section_updates.append("title")
                 if not section.show_in_menus:
                     section.show_in_menus = True
                     section_updates.append("show_in_menus")

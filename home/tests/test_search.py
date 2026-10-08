@@ -1,4 +1,8 @@
 from django.core.files.uploadedfile import SimpleUploadedFile
+from io import StringIO
+from unittest.mock import patch
+
+from django.core.management import call_command
 from django.test import TestCase, override_settings
 from wagtail.documents.models import Document
 from wagtail.models import Page, PageViewRestriction, Site
@@ -131,6 +135,8 @@ class SearchTests(TestCase):
             section,
             body=(
                 '<a linktype="document" id="not-a-number">Unrelated document</a>'
+                '<a linktype="document" id>Missing document</a>'
+                f'<a linktype="document" id="{"9" * 5000}">Huge document</a>'
                 '<a linktype="document" id="999999999">Missing document</a>'
                 f'<a linktype="image" id="{unrelated.id}">Unrelated document</a>'
             ),
@@ -142,6 +148,44 @@ class SearchTests(TestCase):
         self.assertFalse(
             any(result["type"] == "document" for result in response.json()["results"])
         )
+
+    def test_search_finds_document_link_text_across_batches(self):
+        first = self.add_document("Stored first", "first.pdf")
+        second = self.add_document("Stored second", "second.pdf")
+        section = self.add_section()
+        self.add_article(
+            section,
+            body=(
+                f'<a linktype="document" id="{first.id}">Special handbook</a>'
+                f'<a linktype="document" id="{second.id}">Other file</a>'
+            ),
+        )
+
+        with patch("home.views.DOCUMENT_BATCH_SIZE", 1):
+            results = self.search_results("special handbook")
+
+        self.assertIn(first.title, [result["title"] for result in results])
+
+    def test_document_title_relevance_beats_link_order(self):
+        first = self.add_document("Handbook notes", "first.pdf")
+        exact = self.add_document("Handbook handbook", "exact.pdf")
+        section = self.add_section()
+        self.add_article(
+            section,
+            body=(
+                f'<a linktype="document" id="{first.id}">First file</a>'
+                f'<a linktype="document" id="{exact.id}">Second file</a>'
+            ),
+        )
+
+        call_command("update_index", stdout=StringIO())
+        with patch("home.views.DOCUMENT_BATCH_SIZE", 1):
+            results = self.search_results("handbook")
+
+        document_titles = [
+            result["title"] for result in results if result["type"] == "document"
+        ]
+        self.assertEqual(document_titles[:2], [exact.title, first.title])
 
     def test_search_excludes_unlinked_document(self):
         self.add_document("Unlinked document title")

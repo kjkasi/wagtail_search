@@ -14,7 +14,15 @@ function setupPageSearch() {
   let requestSequence = 0;
   let activeIndex = -1;
 
+  const cancelPending = () => {
+    requestSequence += 1;
+    window.clearTimeout(debounceTimer);
+    if (controller) controller.abort();
+    controller = null;
+  };
+
   const closeResults = () => {
+    cancelPending();
     results.hidden = true;
     input.setAttribute("aria-expanded", "false");
     input.removeAttribute("aria-activedescendant");
@@ -112,13 +120,17 @@ function setupPageSearch() {
   };
 
   input.addEventListener("input", () => {
-    window.clearTimeout(debounceTimer);
+    cancelPending();
+    if (!input.value.trim()) {
+      closeResults();
+      return;
+    }
     debounceTimer = window.setTimeout(() => search(input.value), SEARCH_DELAY);
   });
 
   form.addEventListener("submit", (event) => {
     event.preventDefault();
-    window.clearTimeout(debounceTimer);
+    cancelPending();
     search(input.value);
   });
 
@@ -134,6 +146,9 @@ function setupPageSearch() {
     } else if (event.key === "ArrowUp" && links.length) {
       event.preventDefault();
       setActive(activeIndex - 1);
+    } else if (event.key === "Enter" && activeIndex >= 0 && links[activeIndex]) {
+      event.preventDefault();
+      links[activeIndex].click();
     }
   });
 

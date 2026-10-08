@@ -25,11 +25,11 @@ class _DocumentLinkParser(HTMLParser):
         if tag != "a":
             return
         attributes = dict(attrs)
-        document_id = attributes.get("id", "")
+        document_id = attributes.get("id")
         if (
             attributes.get("linktype") == "document"
-            and document_id.isascii()
-            and document_id.isdecimal()
+            and isinstance(document_id, str)
+            and _normalized_document_id(document_id) is not None
         ):
             self._active_links.append([document_id, ""])
 
@@ -58,9 +58,16 @@ def _document_links_for_pages(pages: Iterable[Page]) -> Iterator[tuple[str, str]
 
 
 def _normalized_document_id(document_id: str) -> str | None:
-    if not document_id.isascii() or not document_id.isdecimal():
+    if (
+        not isinstance(document_id, str)
+        or not document_id.isascii()
+        or not document_id.isdecimal()
+    ):
         return None
-    value = int(document_id)
+    normalized_id = document_id.lstrip("0") or "0"
+    if len(normalized_id) > len(str(MAX_DOCUMENT_PK)):
+        return None
+    value = int(normalized_id)
     if value > MAX_DOCUMENT_PK:
         return None
     return str(value)
@@ -115,10 +122,11 @@ def _document_score(document: Document, query: str) -> int:
     title = document.title.casefold()
     normalized_query = query.casefold()
     if title == normalized_query:
-        return 3
-    if title.startswith(normalized_query):
-        return 2
-    return 1
+        return 1000
+    terms = normalized_query.split()
+    term_frequency = sum(title.count(term) for term in terms)
+    starts_with_query = int(title.startswith(normalized_query))
+    return term_frequency * 100 + starts_with_query
 
 
 def _search_pages(queryset, query: str) -> list[Page]:
@@ -189,7 +197,6 @@ def search(request: HttpRequest) -> JsonResponse:
     for start in range(0, len(document_ids), DOCUMENT_BATCH_SIZE):
         batch_ids = document_ids[start : start + DOCUMENT_BATCH_SIZE]
         documents = _documents_for_ids_in_order(batch_ids, len(batch_ids))
-        documents_by_id = {str(document.pk): document for document in documents}
         documents_by_id.update(
             {str(document.pk): document for document in documents}
         )

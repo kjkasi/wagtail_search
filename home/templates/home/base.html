@@ -22,7 +22,7 @@
           </ul>
           <form id="pageSearchForm" class="d-flex position-relative" role="search" action="{% url 'page-search' %}" method="get" autocomplete="off">
             <label class="visually-hidden" for="pageSearchInput">Search pages</label>
-            <input id="pageSearchInput" class="form-control me-2" type="search" name="q" placeholder="Search" autocomplete="off" aria-controls="pageSearchResults" aria-expanded="false" aria-autocomplete="list">
+            <input id="pageSearchInput" class="form-control me-2" type="search" name="q" placeholder="Search" autocomplete="off" role="combobox" aria-controls="pageSearchResults" aria-expanded="false" aria-autocomplete="list">
             <div id="pageSearchResults" class="list-group position-absolute top-100 end-0 w-100 mt-1" role="listbox" aria-live="polite" hidden></div>
           </form>
         </div>
