@@ -212,11 +212,25 @@ class SearchTests(TestCase):
             restriction_type=PageViewRestriction.PASSWORD,
             password="secret",
         )
+        private = self.add_article(
+            local_section,
+            title="Private needle",
+            slug="private-needle",
+        )
+        PageViewRestriction.objects.create(
+            page=private,
+            restriction_type=PageViewRestriction.PASSWORD,
+            password="secret",
+        )
         other_section = self.add_section(
             self.other_home, title="Other section", slug="other"
         )
+        other_document = self.add_document("Other site document", "other.pdf")
         other_article = self.add_article(
-            other_section, title="Other needle", slug="other-needle"
+            other_section,
+            title="Other needle",
+            slug="other-needle",
+            body=f'<a linktype="document" id="{other_document.id}">Other file</a>',
         )
 
         local_results = self.search_results("needle")
@@ -225,7 +239,18 @@ class SearchTests(TestCase):
         self.assertIn(local_article.title, [result["title"] for result in local_results])
         self.assertNotIn(other_article.title, [result["title"] for result in local_results])
         self.assertNotIn(hidden.title, [result["title"] for result in local_results])
+        self.assertNotIn(private.title, [result["title"] for result in local_results])
         self.assertEqual([result["title"] for result in other_results], [other_article.title])
+        self.assertFalse(
+            any(
+                result["type"] == "document"
+                for result in self.search_results("Other site document")
+            )
+        )
+        self.assertEqual(
+            [result["title"] for result in self.search_results("Other site document", host="other.test")],
+            [other_document.title],
+        )
 
     def test_search_ignores_nested_articles(self):
         section = self.add_section()
