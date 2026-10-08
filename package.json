@@ -1,0 +1,10 @@
+{
+  "private": true,
+  "scripts": {
+    "build": "esbuild frontend/main.js --bundle --minify --outdir=static/site"
+  },
+  "dependencies": {
+    "bootstrap": "5.3.8",
+    "esbuild": "^0.25.0"
+  }
+}
