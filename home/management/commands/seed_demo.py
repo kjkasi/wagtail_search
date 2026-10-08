@@ -27,14 +27,24 @@ class Command(BaseCommand):
             section = SectionPage.objects.child_of(home).filter(slug=slug).first()
             if section is None:
                 section = home.add_child(
-                    instance=SectionPage(title=slug, slug=slug)
+                    instance=SectionPage(
+                        title=slug,
+                        slug=slug,
+                        show_in_menus=True,
+                    )
                 )
                 self.stdout.write(f"Created section: {slug}")
             else:
                 self.stdout.write(f"Reusing section: {slug}")
+                section_updates = []
                 if section.title != slug:
                     section.title = slug
-                    section.save(update_fields=["title"])
+                    section_updates.append("title")
+                if not section.show_in_menus:
+                    section.show_in_menus = True
+                    section_updates.append("show_in_menus")
+                if section_updates:
+                    section.save(update_fields=section_updates)
             self._publish(section)
 
             article = (

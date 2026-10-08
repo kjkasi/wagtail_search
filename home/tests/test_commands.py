@@ -23,6 +23,7 @@ class SeedDemoCommandTests(TestCase):
         self.assertEqual([section.title for section in sections], ["bar", "baz", "foo"])
         self.assertTrue(home.live)
         self.assertTrue(all(section.live for section in sections))
+        self.assertTrue(all(section.show_in_menus for section in sections))
         self.assertEqual(
             [ArticlePage.objects.child_of(section).count() for section in sections],
             [1, 1, 1],
