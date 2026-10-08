@@ -110,6 +110,15 @@ class SearchTests(TestCase):
         self.assertEqual([result["title"] for result in document_results], [document.title])
         self.assertTrue(document_results[0]["url"].endswith(document.url))
 
+    def test_search_ignores_rich_text_markup(self):
+        section = self.add_section()
+        self.add_article(
+            section,
+            body='<p><a linktype="document" id="123">Download</a></p>',
+        )
+
+        self.assertEqual(self.search_results("document"), [])
+
     def test_search_finds_document_link_text(self):
         document = self.add_document("Unrelated stored filename")
         section = self.add_section()

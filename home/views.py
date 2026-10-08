@@ -1,7 +1,6 @@
 from html.parser import HTMLParser
 from typing import Iterable, Iterator
 
-from django.db.models import Q
 from django.http import HttpRequest, JsonResponse
 from wagtail.documents.models import Document
 from wagtail.models import Page, Site
@@ -13,6 +12,18 @@ MAX_SEARCH_QUERY_LENGTH: int = 200
 MAX_SEARCH_RESULTS: int = 10
 DOCUMENT_BATCH_SIZE: int = 100
 MAX_DOCUMENT_PK = 2**63 - 1
+
+
+class _VisibleTextParser(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.text: list[str] = []
+
+    def handle_data(self, data):
+        self.text.append(data)
+
+    def visible_text(self) -> str:
+        return " ".join(" ".join(self.text).split())
 
 
 class _DocumentLinkParser(HTMLParser):
@@ -45,10 +56,19 @@ class _DocumentLinkParser(HTMLParser):
         self.links.append((document_id, normalized_text))
 
 
+def _visible_text_for_page(page: Page) -> str:
+    body = getattr(page.specific, "body", "")
+    if not body:
+        return ""
+    parser = _VisibleTextParser()
+    parser.feed(str(body))
+    parser.close()
+    return parser.visible_text()
+
+
 def _document_links_for_pages(pages: Iterable[Page]) -> Iterator[tuple[str, str]]:
     for page in pages:
-        specific_page = page.specific
-        body = getattr(specific_page, "body", "")
+        body = getattr(page.specific, "body", "")
         if not body:
             continue
         parser = _DocumentLinkParser()
@@ -130,14 +150,21 @@ def _document_score(document: Document, query: str) -> int:
 
 
 def _search_pages(queryset, query: str) -> list[Page]:
-    indexed_results = list(queryset.search(query))
+    indexed_results = list(queryset.search(query, fields=["title"]))
     seen_ids = {page.pk for page in indexed_results}
-    fallback_results = queryset.filter(
-        Q(title__icontains=query) | Q(body__icontains=query)
-    )
-    return indexed_results + [
+    fallback_results = queryset.filter(title__icontains=query)
+    results = indexed_results + [
         page for page in fallback_results if page.pk not in seen_ids
     ]
+    seen_ids.update(page.pk for page in results)
+    normalized_query = query.casefold()
+    results.extend(
+        page
+        for page in queryset
+        if page.pk not in seen_ids
+        and normalized_query in _visible_text_for_page(page).casefold()
+    )
+    return results
 
 
 def search(request: HttpRequest) -> JsonResponse:
